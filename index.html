@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>รายงานงานซ่อมบำรุงและตรวจสอบเครื่องจักร + Gemini AI</title>
+<style>
+  * { box-sizing: border-box }
+  body { margin:0; color:#202633; background:#f1f3f7; font-family:Arial,"Noto Sans Thai",sans-serif }
+  header { padding:14px 20px; color:#fff; background:#174e8c; display:flex; justify-content:space-between; align-items:center }
+  header h1 { margin:0; font-size:19px }
+  .badge { background:#28a745; font-size:11px; padding:3px 8px; border-radius:12px; font-weight:normal }
+  main { display:grid; grid-template-columns:350px minmax(0,1fr); gap:16px; padding:16px; align-items:start }
+  .panel,.preview { background:white; border:1px solid #dfe4ec; border-radius:10px; padding:15px }
+  .controls { display:grid; gap:11px }
+  .field { display:grid; gap:4px }
+  label { font-size:12px; font-weight:700; color:#334155 }
+  input,select,textarea,button { font:inherit }
+  input,select,textarea { width:100%; padding:7px 9px; border:1px solid #ccd3df; border-radius:6px; background:white; font-size:13px }
+  textarea { resize:vertical; min-height:50px }
+  button { border:0; border-radius:6px; padding:8px 10px; cursor:pointer; background:#e9edf4; font-weight:600; font-size:13px }
+  button.primary { color:white; background:#1764bd }
+  button.primary:hover { background:#12529d }
+  button.ai-btn { color:white; background:linear-gradient(135deg, #1a73e8, #8e24aa); box-shadow:0 2px 6px rgba(142,36,170,.3) }
+  button.ai-btn:hover { opacity:0.92 }
+  button.danger { color:#a22; background:#fff0f0 }
+  button:disabled { opacity:.5; cursor:not-allowed }
+  .row { display:flex; flex-wrap:wrap; gap:7px }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px }
+  .hint { color:#657187; font-size:11.5px; line-height:1.4; margin:4px 0 }
+  .ai-box { background:#f4f7fc; border:1px solid #c9d7ec; padding:10px; border-radius:8px; display:grid; gap:8px }
+  .preview h2 { margin:0 0 12px; font-size:16px }
+  .pages { display:grid; justify-items:center; gap:20px }
+  .page-label { width:min(100%,794px); margin:0 0 -15px; color:#68758b; font-size:12px; font-weight:600 }
+  .paper {
+    --cols:2; --rows:3; --margin:8mm; --gap:3mm;
+    width:min(100%,794px); aspect-ratio:210/297; padding:var(--margin);
+    background:#fff; box-shadow:0 2px 14px #17243a24; overflow:hidden;
+    display:flex; flex-direction:column; gap:5px; color:#111;
+  }
+  .paper.landscape { width:min(100%,1122px); aspect-ratio:297/210 }
+  .paper-head { text-align:center; border-bottom:1.5px solid #333; padding-bottom:4px }
+  .paper-head h2 { margin:0 0 4px; font-size:15px }
+  .meta { display:grid; grid-template-columns:1fr 1fr; gap:2px 10px; text-align:left; font-size:10px }
+  .sections { display:grid; grid-template-columns:1fr 1fr; gap:4px 8px; font-size:10px }
+  .section { min-width:0; border:1px solid #ddd; background:#fafafa; border-radius:4px; padding:3px 5px }
+  .section h3 { margin:0 0 2px; font-size:10px; color:#174e8c }
+  .section p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; min-height:12px; line-height:1.25 }
+  .photo-grid {
+    flex:1; min-height:0; display:grid;
+    grid-template-columns:repeat(var(--cols),minmax(0,1fr));
+    grid-template-rows:repeat(var(--rows),minmax(0,1fr)); gap:var(--gap)
+  }
+  .cell { position:relative; min-width:0; min-height:0; display:grid; place-items:center; overflow:hidden; border:1px solid #aeb8c5; background:#fff; border-radius:3px }
+  .cell img { display:block; width:min(var(--img-inch,5) * 1in,100%); height:min(var(--img-inch,5) * 1in,100%); max-width:100%; max-height:100%; object-fit:contain; object-position:center }
+  .empty-cell { color:#9aa3b1; font-size:10.5px }
+  .cell-tools { position:absolute; bottom:2px; display:flex; gap:3px; z-index:1 }
+  .cell-tools button { padding:2px 5px; font-size:9.5px; background:#ffffffed; border:1px solid #ccc }
+  .zoom { position:absolute; top:2px; left:4px; width:calc(100% - 8px); height:14px; z-index:1 }
+  .camera { position:fixed; inset:0; z-index:99; display:none; place-items:center; padding:15px; background:#000a }
+  .camera.open { display:grid }
+  .camera-box { width:min(550px,100%); background:#fff; border-radius:10px; padding:14px }
+  .camera video { width:100%; max-height:60vh; background:#111; border-radius:6px }
+  @media(max-width:850px) { main { grid-template-columns:1fr; padding:9px } }
+  @media print {
+    body { background:#fff }
+    header,.panel,.preview>h2,.page-label,.cell-tools,.zoom { display:none!important }
+    main { display:block; padding:0 }
+    .preview { border:0; padding:0 }
+    .pages { display:block }
+    .paper { width:210mm!important; height:297mm!important; aspect-ratio:auto!important; box-shadow:none; break-after:page; page-break-after:always }
+    .paper.landscape { width:297mm!important; height:210mm!important }
+    .paper:last-child { break-after:auto; page-break-after:auto }
+    @page { margin:0 }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>รายงานงานซ่อมบำรุงและตรวจสอบเครื่องจักร</h1>
+  <span class="badge">Google AI Studio Ready</span>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="controls">
+      <!-- ส่วนของ AI Studio -->
+      <div class="ai-box">
+        <label for="geminiKey">🔑 Google AI Studio (Gemini API Key)</label>
+        <input id="geminiKey" type="password" placeholder="AIzaSy...">
+        <div class="row">
+          <button id="aiAnalyzeBtn" class="ai-btn" style="flex:1">✨ ให้ Gemini วิเคราะห์รูปและเขียนรายงาน</button>
+        </div>
+        <p id="aiStatus" class="hint" style="color:#0f53a7;font-weight:600;display:none">กำลังวิเคราะห์ภาพ โปรดรอสักครู่...</p>
+      </div>
+
+      <div class="field"><label for="pageSelect">เลือกหน้าที่กำลังแก้ไข</label><select id="pageSelect"></select></div>
+      <div class="row">
+        <button id="addPage" class="primary">＋ เพิ่มหน้า</button>
+        <button id="removePage" class="danger">ลบหน้านี้</button>
+      </div>
+
+      <div class="grid2">
+        <div class="field"><label for="orientation">แนวกระดาษ</label>
+          <select id="orientation"><option value="portrait">แนวตั้ง (Portrait)</option><option value="landscape">แนวนอน (Landscape)</option></select>
+        </div>
+        <div class="field"><label for="layout">ช่องรูปต่อหน้า</label>
+          <select id="layout"><option value="6">6 รูป</option><option value="8">8 รูป</option><option value="12">12 รูป</option></select>
+        </div>
+      </div>
+
+      <div class="field"><label for="titleInput">หัวข้อหน้านี้</label><input id="titleInput"></div>
+
+      <div class="grid2">
+        <div class="field"><label for="machine">รหัสเครื่องจักร</label><input id="machine" placeholder="เช่น M-01"></div>
+        <div class="field"><label for="workDate">วันที่เข้าทำ</label><input id="workDate" type="date"></div>
+        <div class="field"><label for="supervisor">หัวหน้างาน</label><input id="supervisor" placeholder="ชื่อหัวหน้างาน"></div>
+        <div class="field"><label for="safety">จป. วิชาชีพ / เจ้าหน้าที่</label><input id="safety" placeholder="ชื่อเจ้าหน้าที่"></div>
+      </div>
+      <div class="field"><label for="team">ทีมที่เข้าทำ</label><input id="team" placeholder="ระบุชื่อทีม / บริษัท"></div>
+
+      <div id="sectionEditor"></div>
+
+      <div class="grid2">
+        <div class="field"><label for="photoSize">ขนาดรูป (นิ้ว)</label>
+          <select id="photoSize">
+            <option>4</option><option selected>5</option><option>6</option>
+            <option>7</option><option>8</option><option>9</option>
+          </select>
+        </div>
+        <div class="field"><label for="margin">ขอบกระดาษ (มม.)</label><input id="margin" type="number" min="0" max="25"></div>
+      </div>
+
+      <div class="field"><label for="multiFiles">เพิ่มรูปภาพ (เลือกได้หลายรูป)</label><input id="multiFiles" type="file" accept="image/*" multiple></div>
+      <div class="row">
+        <button id="cameraBtn">📷 ถ่ายรูปจากกล้อง</button>
+        <button id="switchCamera">สลับกล้อง</button>
+      </div>
+
+      <hr style="border:0;border-top:1px solid #e2e8f0;margin:6px 0">
+      <div class="row">
+        <button id="saveBtn">บันทึกงาน (JSON)</button>
+        <button id="openBtn">เปิดงานเก่า</button>
+        <button id="pdfBtn" class="primary">🖨️ พิมพ์ / เซฟเป็น PDF</button>
+        <button id="wordBtn">ส่งออก Word</button>
+        <input id="openFile" type="file" accept=".json,application/json" hidden>
+      </div>
+      <p class="hint">💡 เคล็ดลับ: อัปโหลดรูปภาพลงในหน้า จากนั้นกดปุ่ม "✨ ให้ Gemini วิเคราะห์รูป" AI จะเขียนเนื้อหาให้ทันที</p>
+    </div>
+  </section>
+
+  <section class="preview">
+    <h2>ตัวอย่างเอกสาร A4</h2>
+    <div id="pages" class="pages"></div>
+  </section>
+</main>
+
+<div id="cameraModal" class="camera">
+  <div class="camera-box">
+    <h3 style="margin:0 0 10px">ถ่ายภาพจากกล้อง</h3>
+    <video id="video" autoplay playsinline></video>
+    <div class="row" style="margin-top:10px">
+      <button id="captureBtn" class="primary">กดถ่ายภาพ</button>
+      <button id="closeCamera">ปิดหน้าต่าง</button>
+    </div>
+    <p id="cameraMessage" class="hint"></p>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const templates = [
+  ["หน้า 1 OVERHAUL MOTOR", ["CLEANING","PM","ก่อนทำ","หลังทำ"]],
+  ["หน้า 2 OVERHAUL BLOWER", ["CLEANING","PM","ก่อนทำ","หลังทำ"]],
+  ["หน้า 3 เปลี่ยนสายพาน และตั้ง Alignment Laser", ["CLEANING","PM"]],
+  ["หน้า 4 วัดค่าความร้อน Temperature และค่าความสั่นสะเทือน Vibration (mm/s)", ["CLEANING","PM"]],
+  ["หน้า 5 ข้อเสนอแนะ Comment / Alarm Code", ["CLEANING","PM"]],
+  ["หน้า 6 หมายเหตุ", ["หมายเหตุ","CLEANING","PM"]]
+];
+
+function newPage(title="หน้าใหม่", headings=["CLEANING","PM"]) {
+  return {
+    title, headings: headings.map(heading => ({heading, text:""})),
+    orientation:"portrait", layout:6, size:5, margin:8,
+    slots:Array(6).fill(null)
+  };
+}
+
+let job = {
+  meta:{machine:"",workDate:new Date().toISOString().slice(0,10),supervisor:"",safety:"",team:""},
+  pages:templates.map(([title,heads])=>newPage(title,heads)),
+  current:0
+};
+
+// จำ API Key ในเครื่อง
+const storedApiKey = localStorage.getItem("gemini_api_key") || "";
+$("geminiKey").value = storedApiKey;
+$("geminiKey").addEventListener("input", e => localStorage.setItem("gemini_api_key", e.target.value.trim()));
+
+function gridShape(page) {
+  const n = Number(page.layout);
+  if(page.orientation === "portrait") return n===6 ? [2,3] : n===8 ? [2,4] : [3,4];
+  return n===6 ? [3,2] : n===8 ? [4,2] : [4,3];
+}
+
+function renderControls() {
+  const select = $("pageSelect"); select.replaceChildren();
+  job.pages.forEach((p,i)=>{
+    const o = document.createElement("option");
+    o.value = i; o.textContent = `${i+1}. ${p.title}`;
+    select.append(o);
+  });
+  job.current = Math.max(0, Math.min(job.current, job.pages.length-1));
+  select.value = job.current;
+  const p = job.pages[job.current];
+  $("removePage").disabled = job.pages.length === 1;
+  $("orientation").value = p.orientation;
+  $("layout").value = p.layout;
+  $("titleInput").value = p.title;
+  $("photoSize").value = p.size;
+  $("margin").value = p.margin;
+  for(const key of ["machine","workDate","supervisor","safety","team"]) $(key).value = job.meta[key]||"";
+
+  const editor = $("sectionEditor"); editor.replaceChildren();
+  p.headings.forEach((section)=>{
+    const field = document.createElement("div"); field.className = "field";
+    const label = document.createElement("label"); label.textContent = section.heading;
+    const textarea = document.createElement("textarea"); textarea.value = section.text;
+    textarea.placeholder = `กรอกรายละเอียด ${section.heading} หรือกดใช้ AI วิเคราะห์`;
+    textarea.addEventListener("input", ()=>{ section.text = textarea.value; renderPreview(); });
+    field.append(label, textarea); editor.append(field);
+  });
+}
+
+function makeText(tag, text, className) {
+  const el = document.createElement(tag); if(className) el.className = className; el.textContent = text; return el;
+}
+
+function renderPreview() {
+  const container = $("pages"); container.replaceChildren();
+  job.pages.forEach((p, pageIndex)=>{
+    container.append(makeText("div", `หน้า ${pageIndex+1} · ${p.title}`, "page-label"));
+    const paper = document.createElement("article");
+    paper.className = `paper ${p.orientation}`;
+    paper.style.setProperty("--margin", `${p.margin}mm`);
+
+    const head = document.createElement("div"); head.className = "paper-head";
+    head.append(makeText("h2", p.title));
+    const meta = document.createElement("div"); meta.className = "meta";
+    [
+      `รหัสเครื่องจักร: ${job.meta.machine || "________________"}`,
+      `วันที่เข้าทำ: ${job.meta.workDate || "________________"}`,
+      `หัวหน้างาน: ${job.meta.supervisor || "________________"}`,
+      `เจ้าหน้าที่ความปลอดภัย: ${job.meta.safety || "________________"}`,
+      `ทีมที่เข้าทำ: ${job.meta.team || "________________"}`
+    ].forEach(t => meta.append(makeText("div", t)));
+    head.append(meta); paper.append(head);
+
+    const sections = document.createElement("div"); sections.className = "sections";
+    p.headings.forEach(s => {
+      const box = document.createElement("div"); box.className = "section";
+      box.append(makeText("h3", s.heading), makeText("p", s.text || "-"));
+      sections.append(box);
+    });
+    paper.append(sections);
+
+    const [cols, rows] = gridShape(p);
+    const grid = document.createElement("div"); grid.className = "photo-grid";
+    grid.style.setProperty("--cols", cols); grid.style.setProperty("--rows", rows);
+    grid.style.setProperty("--gap", "2.5mm");
+
+    p.slots.forEach((slot, slotIndex)=>{
+      const cell = document.createElement("div"); cell.className = "cell";
+      if(slot?.src) {
+        const img = document.createElement("img"); img.src = slot.src; img.alt = "ภาพประกอบ";
+        img.style.setProperty("--img-inch", p.size);
+        img.style.transform = `scale(${slot.zoom||1})`;
+        cell.append(img);
+        const zoom = document.createElement("input"); zoom.type = "range"; zoom.className = "zoom";
+        zoom.min = ".65"; zoom.max = "1.5"; zoom.step = ".05"; zoom.value = slot.zoom||1;
+        zoom.title = "ปรับขนาดรูป";
+        zoom.addEventListener("input", ()=>{ slot.zoom = Number(zoom.value); img.style.transform = `scale(${slot.zoom})`; });
+        cell.append(zoom);
+      } else {
+        cell.append(makeText("span", `ช่องรูปที่ ${slotIndex+1}`, "empty-cell"));
+      }
+
+      const tools = document.createElement("div"); tools.className = "cell-tools";
+      const add = document.createElement("button"); add.textContent = slot ? "เปลี่ยน" : "+ ใส่รูป";
+      add.addEventListener("click", ()=>{ photoTarget = {pageIndex, slotIndex}; singleInput.click(); });
+      const del = document.createElement("button"); del.textContent = "ลบ";
+      del.disabled = !slot; del.addEventListener("click", ()=>{ p.slots[slotIndex] = null; renderPreview(); });
+      tools.append(add, del); cell.append(tools); grid.append(cell);
+    });
+
+    paper.append(grid); container.append(paper);
+  });
+}
+
+function render() { renderControls(); renderPreview(); }
+
+// ระบบบีบอัดรูปภาพก่อนโหลดเข้า Memory
+async function compressImage(file, maxWidth = 1200, quality = 0.8) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function firstEmpty() {
+  for(let offset=0; offset<job.pages.length; offset++){
+    const i = (job.current + offset) % job.pages.length;
+    const slot = job.pages[i].slots.findIndex(x => !x);
+    if(slot >= 0) return {pageIndex:i, slotIndex:slot};
+  }
+  const base = job.pages[job.current];
+  const p = newPage("หน้าใหม่", base.headings.map(x=>x.heading));
+  p.orientation = base.orientation; p.layout = base.layout; p.size = base.size; p.margin = base.margin;
+  p.slots = Array(p.layout).fill(null); job.pages.push(p);
+  return {pageIndex:job.pages.length-1, slotIndex:0};
+}
+
+function placeImage(src, target=null) {
+  const pos = target || firstEmpty();
+  const p = job.pages[pos.pageIndex];
+  p.slots[pos.slotIndex] = {src, zoom:1};
+  job.current = pos.pageIndex;
+  render();
+}
+
+let photoTarget = null;
+const singleInput = document.createElement("input");
+singleInput.type = "file"; singleInput.accept = "image/*"; singleInput.hidden = true; document.body.append(singleInput);
+singleInput.addEventListener("change", async e => {
+  const f = e.target.files[0];
+  if(f && photoTarget) {
+    const compressed = await compressImage(f);
+    placeImage(compressed, photoTarget);
+  }
+  photoTarget = null; e.target.value = "";
+});
+
+$("multiFiles").addEventListener("change", async e => {
+  for(const f of e.target.files) {
+    if(f.type.startsWith("image/")) {
+      const compressed = await compressImage(f);
+      placeImage(compressed);
+    }
+  }
+  e.target.value = "";
+});
+
+// UI Event Listeners
+$("pageSelect").addEventListener("change", e => { job.current = Number(e.target.value); render(); });
+$("titleInput").addEventListener("input", e => {
+  job.pages[job.current].title = e.target.value;
+  renderPreview();
+  $("pageSelect").options[job.current].textContent = `${job.current+1}. ${e.target.value}`;
+});
+for(const key of ["machine","workDate","supervisor","safety","team"]) {
+  $(key).addEventListener("input", e => { job.meta[key] = e.target.value; renderPreview(); });
+}
+$("orientation").addEventListener("change", e => { job.pages[job.current].orientation = e.target.value; renderPreview(); });
+$("layout").addEventListener("change", e => {
+  const p = job.pages[job.current], n = Number(e.target.value);
+  p.slots = Array.from({length:n}, (_,i) => p.slots[i]||null);
+  p.layout = n; renderPreview();
+});
+$("photoSize").addEventListener("change", e => { job.pages[job.current].size = Number(e.target.value); renderPreview(); });
+$("margin").addEventListener("input", e => {
+  job.pages[job.current].margin = Math.max(0, Math.min(25, Number(e.target.value)||0));
+  renderPreview();
+});
+$("addPage").addEventListener("click", () => {
+  job.pages.push(newPage()); job.current = job.pages.length-1; render();
+});
+$("removePage").addEventListener("click", () => {
+  if(job.pages.length <= 1) return;
+  job.pages.splice(job.current, 1);
+  job.current = Math.max(0, job.current-1);
+  render();
+});
+$("pdfBtn").addEventListener("click", () => window.print());
+
+// บันทึกและเปิดไฟล์ JSON
+$("saveBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(job)], {type:"application/json"});
+  download(blob, `รายงานซ่อมบำรุง_${job.meta.machine||"เครื่องจักร"}.json`);
+});
+$("openBtn").addEventListener("click", () => $("openFile").click());
+$("openFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if(!Array.isArray(data.pages)) throw Error();
+    job = data;
+    render();
+  } catch { alert("เปิดไฟล์ไม่สำเร็จ กรุณาใช้ไฟล์ JSON ที่บันทึกจากระบบนี้"); }
+  e.target.value = "";
+});
+
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+
+// ระบบเชื่อมต่อ Google AI Studio (Gemini Multimodal API)
+$("aiAnalyzeBtn").addEventListener("click", async () => {
+  const apiKey = $("geminiKey").value.trim();
+  if(!apiKey) return alert("กรุณาระบุ Google AI Studio API Key ก่อนใช้งาน (ดูได้ฟรีที่ aistudio.google.com)");
+
+  const curPage = job.pages[job.current];
+  const images = curPage.slots.filter(s => s && s.src).map(s => s.src.split(',')[1]);
+
+  if(images.length === 0) {
+    return alert("กรุณาเพิ่มรูปภาพในหน้านี้อย่างน้อย 1 รูป เพื่อให้ AI ช่วยวิเคราะห์ครับ");
+  }
+
+  const headingsList = curPage.headings.map(h => `"${h.heading}"`).join(", ");
+  const statusEl = $("aiStatus");
+  statusEl.style.display = "block";
+  statusEl.textContent = `⏳ กำลังส่งรูปภาพ ${images.length} รูปให้ Gemini วิเคราะห์...`;
+  $("aiAnalyzeBtn").disabled = true;
+
+  const prompt = `คุณคือวิศวกรผู้เชี่ยวชาญด้านงานซ่อมบำรุงและเครื่องจักรอุตสาหกรรม
+กรุณาวิเคราะห์ภาพถ่ายหน้างานในหัวข้อ: "${curPage.title}"
+และช่วยสรุปข้อมูลเชิงเทคนิค กระชับ ชัดเจน เป็นมืออาชีพ สำหรับหัวข้อย่อยดังต่อไปนี้: ${headingsList}
+
+เงื่อนไข:
+- ตอบกลับมาเป็น JSON เท่านั้น
+- คีย์ของ JSON ต้องตรงกับหัวข้อย่อย: ${headingsList}
+- ตัวอย่างผลลัพธ์:
+{
+  "CLEANING": "ทำความสะอาดคราบน้ำมันและฝุ่นผงบริเวณ...",
+  "PM": "ตรวจสอบความตึงสายพาน และอัดจาระบีลูกปืน..."
+}`;
+
+  try {
+    const contentsParts = [
+      { text: prompt },
+      ...images.map(imgData => ({ inline_data: { mime_type: "image/jpeg", data: imgData } }))
+    ];
+
+    // เรียกใช้ Gemini 2.5 Flash
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: contentsParts }],
+        generationConfig: { response_mime_type: "application/json" }
+      })
+    });
+
+    const resData = await res.json();
+    if(resData.error) throw new Error(resData.error.message);
+
+    const jsonText = resData.candidates[0].content.parts[0].text;
+    const parsedData = JSON.parse(jsonText);
+
+    // ใส่ข้อมูลที่ได้จาก AI ลงในหัวข้อย่อย
+    curPage.headings.forEach(h => {
+      if(parsedData[h.heading]) {
+        h.text = parsedData[h.heading];
+      }
+    });
+
+    render();
+    alert("✨ AI วิเคราะห์และกรอกข้อมูลลงในหัวข้อให้เรียบร้อยแล้ว!");
+  } catch(err) {
+    console.error(err);
+    alert(`เกิดข้อผิดพลาดในการเรียกใช้ AI: ${err.message}`);
+  } finally {
+    statusEl.style.display = "none";
+    $("aiAnalyzeBtn").disabled = false;
+  }
+});
+
+// ส่งออกไฟล์ Word
+$("wordBtn").addEventListener("click", () => {
+  const clone = $("pages").cloneNode(true);
+  clone.querySelectorAll(".page-label, .cell-tools, .zoom").forEach(x => x.remove());
+  const style = `<style>
+    body{font-family:Arial,sans-serif;color:#111}
+    .paper{width:210mm;height:297mm;padding:8mm;page-break-after:always;display:flex;flex-direction:column;gap:5px}
+    .paper.landscape{width:297mm;height:210mm}
+    .paper-head{text-align:center;border-bottom:1px solid #555}
+    .meta,.sections{display:grid;grid-template-columns:1fr 1fr;gap:5px;font-size:10pt}
+    .section{border:1px solid #bbb;padding:4px}
+    .photo-grid{flex:1;display:grid;grid-template-columns:repeat(var(--cols),1fr);grid-template-rows:repeat(var(--rows),1fr);gap:3mm}
+    .cell{border:1px solid #aaa;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .cell img{max-width:100%;max-height:100%;object-fit:contain}
+  </style>`;
+  const html = `<html><head><meta charset="utf-8">${style}</head><body>${clone.innerHTML}</body></html>`;
+  download(new Blob(["\ufeff", html], {type:"application/msword"}), `รายงาน_${job.meta.machine||"ซ่อมบำรุง"}.doc`);
+});
+
+// ระบบกล้องถ่ายภาพ
+let cameraStream = null, cameraFacing = "environment";
+$("cameraBtn").addEventListener("click", openCamera);
+$("switchCamera").addEventListener("click", async () => {
+  cameraFacing = cameraFacing === "environment" ? "user" : "environment";
+  if(cameraStream) await openCamera();
+});
+async function openCamera() {
+  try {
+    if(cameraStream) cameraStream.getTracks().forEach(t=>t.stop());
+    cameraStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:cameraFacing}, audio:false});
+    $("video").srcObject = cameraStream;
+    $("cameraMessage").textContent = "";
+    $("cameraModal").classList.add("open");
+  } catch {
+    $("cameraMessage").textContent = "เปิดกล้องไม่ได้ กรุณาอนุญาตการเข้าถึงกล้องในเบราว์เซอร์";
+    $("cameraModal").classList.add("open");
+  }
+}
+$("captureBtn").addEventListener("click", () => {
+  const v = $("video"); if(!v.videoWidth) return;
+  const c = document.createElement("canvas");
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext("2d").drawImage(v,0,0);
+  placeImage(c.toDataURL("image/jpeg", 0.82));
+  closeCamera();
+});
+$("closeCamera").addEventListener("click", closeCamera);
+function closeCamera() {
+  if(cameraStream) { cameraStream.getTracks().forEach(t=>t.stop()); cameraStream = null; }
+  $("video").srcObject = null;
+  $("cameraModal").classList.remove("open");
+}
+
+render();
+</script>
+</body>
+</html>
