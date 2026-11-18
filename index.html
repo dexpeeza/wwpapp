@@ -1,1 +1,545 @@
 
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ป้ายห้ามขโมยเห็ดฟาง</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- เพิ่มไลบรารี html2canvas สำหรับบันทึกป้ายเป็นไฟล์รูปภาพ PNG ความละเอียดสูง -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            /* บังคับให้เครื่องพิมพ์พิมพ์สีพื้นหลังและสีป้ายออกมาครบถ้วน (แก้ปัญหาพิมพ์แล้วพื้นหลังขาวโพลน) */
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Kanit', sans-serif;
+        }
+
+        /* กรอบจำลองขนาด A4 แนวนอน อัตราส่วนคงที่ 1122x793 px ย่อ-ขยายตามหน้าจออัตโนมัติ */
+        #sign-scale-container {
+            width: 1122px;
+            height: 793px;
+            transform-origin: center center;
+        }
+
+        /* สไตล์สำหรับข้อความที่คลิกแก้ไขได้บนป้าย */
+        [contenteditable="true"] {
+            cursor: text;
+            transition: background-color 0.15s, outline 0.15s;
+            border-radius: 6px;
+            padding: 0 6px;
+        }
+        [contenteditable="true"]:hover {
+            outline: 2px dashed rgba(239, 68, 68, 0.5);
+        }
+        [contenteditable="true"]:focus {
+            outline: 3px solid #3b82f6;
+            background-color: rgba(255, 255, 255, 0.15);
+        }
+        
+        /* สไตล์สำหรับการสั่งพิมพ์ลงกระดาษ A4 จริง */
+        @media print {
+            @page {
+                size: A4 landscape;
+                margin: 0;
+            }
+            html, body {
+                width: 297mm !important;
+                height: 210mm !important;
+                background: white !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            #sign-container-wrapper {
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 297mm !important;
+                height: 210mm !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                overflow: hidden !important;
+            }
+            #sign-scale-container {
+                width: 297mm !important;
+                height: 210mm !important;
+                transform: none !important;
+            }
+            #printable-sign {
+                width: 100% !important;
+                height: 100% !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                border-width: 14px !important;
+            }
+            [contenteditable="true"]:hover,
+            [contenteditable="true"]:focus {
+                outline: none !important;
+                background: transparent !important;
+            }
+            .ping-anim {
+                display: none !important;
+            }
+        }
+
+        .text-shadow-sm {
+            text-shadow: 2px 2px 0px rgba(0,0,0,0.15);
+        }
+    </style>
+</head>
+<body class="bg-slate-200 min-h-screen flex flex-col lg:flex-row overflow-x-hidden">
+
+    <!-- แผงควบคุม (จะถูกซ่อนเวลาสั่งพิมพ์) -->
+    <div class="no-print w-full lg:w-[400px] xl:w-[420px] shrink-0 bg-white shadow-xl p-5 flex flex-col gap-4 z-20 lg:h-screen lg:overflow-y-auto border-r border-slate-300">
+        <div>
+            <h1 class="text-xl font-extrabold text-slate-800 flex items-center gap-2">
+                <span>🍄</span> ระบบสร้างป้ายเตือนฟาร์มเห็ดฟาง
+            </h1>
+            <p class="text-xs text-slate-500 mt-1">แก้ไขข้อความในช่องด้านล่าง หรือคลิกพิมพ์แก้ไขบนป้ายได้โดยตรง (เชื่อมข้อมูลอัตโนมัติ)</p>
+        </div>
+
+        <!-- เลือกข้อความสำเร็จรูป (แก้ข้อบกพร่องด้านภาษาและสถานะปุ่ม) -->
+        <div class="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <label class="block text-xs font-bold text-slate-700 uppercase">เลือกชุดคำบนป้าย:</label>
+            <div class="grid grid-cols-1 gap-1.5" id="preset-buttons">
+                <button type="button" id="btn-preset-steal" onclick="setPreset('steal')" class="preset-btn text-left px-3 py-2 rounded-lg border-2 border-red-600 bg-red-50 text-red-900 text-xs font-bold transition flex items-center justify-between">
+                    <span>1. ห้ามขโมยเห็ดฟาง ก่อนได้รับอนุญาต (ตามคำสั่งเดิม)</span>
+                    <span class="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded">เลือกอยู่</span>
+                </button>
+                <button type="button" id="btn-preset-pick" onclick="setPreset('pick')" class="preset-btn text-left px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-bold hover:bg-slate-100 transition flex items-center justify-between">
+                    <span>2. ห้ามเก็บเห็ดฟาง ก่อนได้รับอนุญาต (แนะนำ/ถูกต้องตามหลักภาษา)</span>
+                </button>
+                <button type="button" id="btn-preset-strict" onclick="setPreset('strict')" class="preset-btn text-left px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-bold hover:bg-slate-100 transition flex items-center justify-between">
+                    <span>3. ห้ามลักขโมยเห็ดฟางเด็ดขาด (ชัดเจน/ดุดัน)</span>
+                </button>
+            </div>
+            <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1">
+                💡 <b>ข้อสังเกต:</b> คำว่า <i>"ห้ามขโมย...ก่อนได้รับอนุญาต"</i> อาจตีความเพี้ยนได้ว่าสามารถขออนุญาตขโมยได้ หากต้องการความรัดกุมทางกฎหมาย แนะนำตัวเลือกที่ 2 หรือ 3 ครับ
+            </p>
+        </div>
+
+        <!-- แก้ไขข้อความ -->
+        <div class="space-y-2.5 border-t border-slate-200 pt-3">
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600">หัวข้อป้ายด้านบน</label>
+                    <input type="text" id="input-header" value="ประกาศเตือน!" oninput="syncFromInputs()" class="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600">เบอร์โทรติดต่อ (เว้นว่างได้)</label>
+                    <input type="text" id="input-phone" value="ติดต่อขอซื้อ/อนุญาต โทร. 08X-XXX-XXXX" oninput="syncFromInputs()" placeholder="เว้นว่างเพื่อซ่อน" class="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-red-500">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-600">ข้อความหลัก (บรรทัดที่ 1)</label>
+                <input type="text" id="input-main1" value="ห้ามขโมยเห็ดฟาง" oninput="syncFromInputs()" class="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-600">ข้อความรอง (บรรทัดที่ 2)</label>
+                <input type="text" id="input-main2" value="ก่อนได้รับอนุญาต" oninput="syncFromInputs()" class="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-600">อัตราค่าปรับ</label>
+                <input type="text" id="input-fine" value="ฝ่าฝืนปรับ 2,000 - 5,000 บาท" oninput="syncFromInputs()" class="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm font-bold text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-600">ข้อความกำกับด้านล่าง</label>
+                <input type="text" id="input-footer" value="และดำเนินคดีตามกฎหมายถึงที่สุด • พื้นที่นี้มีกล้องวงจรปิดบันทึกภาพ 24 ชม." oninput="syncFromInputs()" class="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+            </div>
+        </div>
+
+        <!-- เลือกโทนสีและขนาดตัวอักษร -->
+        <div class="space-y-2 border-t border-slate-200 pt-3">
+            <label class="block text-xs font-bold text-slate-700">โทนสีป้าย:</label>
+            <div class="grid grid-cols-3 gap-2">
+                <button type="button" id="theme-red" onclick="setTheme('red')" class="py-2 px-2 rounded-lg bg-red-600 text-white font-bold text-xs shadow ring-2 ring-offset-2 ring-red-600 transition">
+                    ขาว-แดง (มาตรฐาน)
+                </button>
+                <button type="button" id="theme-yellow" onclick="setTheme('yellow')" class="py-2 px-2 rounded-lg bg-amber-400 text-black font-bold text-xs shadow hover:bg-amber-500 transition">
+                    เหลือง-ดำ (สะดุดตา)
+                </button>
+                <button type="button" id="theme-dark" onclick="setTheme('dark')" class="py-2 px-2 rounded-lg bg-slate-900 text-white font-bold text-xs shadow hover:bg-slate-800 transition">
+                    ดำ-แดง (ดุดัน)
+                </button>
+            </div>
+        </div>
+
+        <!-- ตัวเลือกเสริม -->
+        <div class="space-y-2 border-t border-slate-200 pt-3">
+            <label class="flex items-center justify-between cursor-pointer">
+                <span class="text-xs font-bold text-slate-700">แสดงป้ายกล้องวงจรปิด (CCTV 24 ชม.)</span>
+                <input type="checkbox" id="toggle-cctv" checked onchange="toggleCCTV()" class="w-4 h-4 accent-red-600 rounded cursor-pointer">
+            </label>
+            <label class="flex items-center justify-between cursor-pointer">
+                <span class="text-xs font-bold text-slate-700">แสดงรูเจาะตาไก่ 4 มุม (สำหรับป้ายไวนิล/เคลือบแข็ง)</span>
+                <input type="checkbox" id="toggle-eyelets" onchange="toggleEyelets()" class="w-4 h-4 accent-red-600 rounded cursor-pointer">
+            </label>
+        </div>
+
+        <!-- ปุ่มใช้งานจริง: ดาวน์โหลดรูปภาพ และ สั่งพิมพ์ -->
+        <div class="mt-auto pt-3 border-t border-slate-200 space-y-2">
+            <!-- ปุ่มดาวน์โหลดรูปภาพ PNG (ใช้งานได้ 100% ทุกอุปกรณ์และส่งร้านป้ายได้ทันที) -->
+            <button type="button" id="btn-download" onclick="downloadSignImage()" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-extrabold text-base rounded-xl shadow-md flex items-center justify-center gap-2 transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span id="download-btn-text">ดาวน์โหลดเป็นรูปภาพ (PNG คมชัดสูง)</span>
+            </button>
+
+            <!-- ปุ่มสั่งพิมพ์ผ่านเครื่องพิมพ์ -->
+            <button type="button" onclick="printSign()" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm rounded-xl shadow flex items-center justify-center gap-2 transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                สั่งพิมพ์ออกเครื่องปริ้นเตอร์ / บันทึก PDF (A4)
+            </button>
+
+            <div id="status-msg" class="hidden text-xs font-bold text-center py-1.5 px-3 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200"></div>
+        </div>
+    </div>
+
+    <!-- พื้นที่แสดงตัวอย่างป้าย (ย่อ-ขยายสัดส่วนอัตโนมัติไม่ให้ข้อความล้นกรอบบนมือถือ) -->
+    <div id="sign-container-wrapper" class="flex-1 p-3 md:p-8 flex items-center justify-center overflow-hidden min-h-[340px] relative">
+        
+        <div id="sign-scale-container" class="flex items-center justify-center">
+            <!-- ตัวป้ายขนาดมาตรฐาน A4 แนวนอน (1122 x 793 px) เอา select-none ออกเพื่อให้คลิกแก้ไขข้อความได้จริง -->
+            <div id="printable-sign" class="w-full h-full bg-white border-[16px] border-red-600 rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden relative">
+                
+                <!-- จุดมาร์คเจาะตาไก่ 4 มุม (ซ่อนไว้เป็นค่าเริ่มต้น) -->
+                <div id="eyelets-layer" class="hidden pointer-events-none absolute inset-0 z-30">
+                    <div class="w-6 h-6 rounded-full border-4 border-slate-500 bg-white/80 absolute top-3 left-3 shadow-inner"></div>
+                    <div class="w-6 h-6 rounded-full border-4 border-slate-500 bg-white/80 absolute top-3 right-3 shadow-inner"></div>
+                    <div class="w-6 h-6 rounded-full border-4 border-slate-500 bg-white/80 absolute bottom-3 left-3 shadow-inner"></div>
+                    <div class="w-6 h-6 rounded-full border-4 border-slate-500 bg-white/80 absolute bottom-3 right-3 shadow-inner"></div>
+                </div>
+
+                <!-- แถบหัวป้าย -->
+                <div id="sign-header-bg" class="bg-red-600 text-white py-4 px-10 flex items-center justify-center gap-5 shadow-md relative shrink-0">
+                    <!-- ไอคอนระวังซ้าย -->
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14 text-yellow-300 shrink-0 drop-shadow" viewBox="0 0 24 24" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
+                    </svg>
+
+                    <h2 id="sign-header" contenteditable="true" spellcheck="false" oninput="syncFromSign('header')" class="text-6xl font-black tracking-wider uppercase text-center text-yellow-300 drop-shadow-[0_3px_3px_rgba(0,0,0,0.4)] leading-tight">ประกาศเตือน!</h2>
+
+                    <!-- ไอคอนระวังขวา -->
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14 text-yellow-300 shrink-0 drop-shadow" viewBox="0 0 24 24" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+
+                <!-- เนื้อหาหลักตรงกลาง -->
+                <div class="flex-1 flex flex-col items-center justify-center px-8 py-2 relative min-h-0">
+                    
+                    <!-- ป้าย CCTV มุมขวาบนของพื้นที่กลาง -->
+                    <div id="cctv-badge" class="absolute top-4 right-6 bg-slate-900 text-white px-4 py-2.5 rounded-2xl flex items-center gap-3 shadow-lg border-2 border-slate-700">
+                        <span class="relative flex h-4 w-4 shrink-0">
+                            <span class="ping-anim animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-4 w-4 bg-red-600"></span>
+                        </span>
+                        <!-- ไอคอนกล้อง CCTV -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-yellow-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19.5 6h-15A2.5 2.5 0 002 8.5v7A2.5 2.5 0 004.5 18h15a2.5 2.5 0 002.5-2.5v-7A2.5 2.5 0 0019.5 6zm-7.5 8.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7z"/>
+                            <circle cx="12" cy="11" r="1.5"/>
+                        </svg>
+                        <div class="text-left leading-tight">
+                            <div class="text-sm font-extrabold text-yellow-400 tracking-wider">CCTV 24 HR</div>
+                            <div class="text-xs font-bold text-white">บันทึกภาพตลอดเวลา</div>
+                        </div>
+                    </div>
+
+                    <!-- สัญลักษณ์ห้ามเก็บเห็ดฟาง -->
+                    <div class="relative w-44 h-44 flex items-center justify-center mb-2 shrink-0">
+                        <!-- รูปเห็ดฟาง (SVG วาดพิเศษให้ดูเป็นเห็ดฟางดอกบานและดอกตูม) -->
+                        <svg viewBox="0 0 200 200" class="w-36 h-36">
+                            <!-- เห็ดฟางดอกบาน -->
+                            <g transform="translate(15, 10)">
+                                <path d="M65 110 C60 145, 55 165, 85 165 C115 165, 110 145, 105 110 Z" fill="#F5E6D3" stroke="#5C4033" stroke-width="5"/>
+                                <path d="M55 135 C55 162, 70 170, 85 170 C100 170, 115 162, 115 135 C105 145, 95 150, 85 140 C75 150, 65 145, 55 135 Z" fill="#8B5A2B" stroke="#5C4033" stroke-width="5" stroke-linejoin="round"/>
+                                <path d="M25 110 C25 55, 65 40, 85 40 C105 40, 145 55, 145 110 C115 118, 55 118, 25 110 Z" fill="#A07855" stroke="#5C4033" stroke-width="5" stroke-linejoin="round"/>
+                                <path d="M45 75 C60 50, 75 43, 85 43 C95 43, 110 50, 125 75 C105 68, 65 68, 45 75 Z" fill="#6E4726"/>
+                            </g>
+                            <!-- เห็ดฟางดอกตูม -->
+                            <g transform="translate(105, 85)">
+                                <ellipse cx="35" cy="50" rx="26" ry="34" fill="#D2B48C" stroke="#5C4033" stroke-width="5"/>
+                                <path d="M15 35 C20 18, 50 18, 55 35 C42 30, 28 30, 15 35 Z" fill="#6E4726"/>
+                                <path d="M9 55 C12 78, 25 85, 35 85 C45 85, 58 78, 61 55 C48 65, 22 65, 9 55 Z" fill="#8B5A2B" stroke="#5C4033" stroke-width="4"/>
+                            </g>
+                        </svg>
+
+                        <!-- สัญลักษณ์วงกลมขีดฆ่าสีแดงทับ -->
+                        <svg viewBox="0 0 100 100" class="absolute inset-0 w-full h-full text-red-600 drop-shadow-md pointer-events-none">
+                            <circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" stroke-width="10"/>
+                            <line x1="19" y1="19" x2="81" y2="81" stroke="currentColor" stroke-width="10"/>
+                        </svg>
+                    </div>
+
+                    <!-- ข้อความหลัก -->
+                    <div class="text-center space-y-2 w-full">
+                        <div>
+                            <h1 id="sign-main1" contenteditable="true" spellcheck="false" oninput="syncFromSign('main1')" class="text-[76px] font-black text-red-600 tracking-tight leading-none text-shadow-sm inline-block">ห้ามขโมยเห็ดฟาง</h1>
+                        </div>
+                        <div>
+                            <h2 id="sign-main2" contenteditable="true" spellcheck="false" oninput="syncFromSign('main2')" class="text-[56px] font-extrabold text-slate-900 tracking-tight leading-tight inline-block">ก่อนได้รับอนุญาต</h2>
+                        </div>
+                        <div id="phone-wrapper" class="pt-1">
+                            <span id="sign-phone" contenteditable="true" spellcheck="false" oninput="syncFromSign('phone')" class="inline-block bg-emerald-700 text-white text-2xl font-bold px-6 py-1.5 rounded-full shadow">ติดต่อขอซื้อ/อนุญาต โทร. 08X-XXX-XXXX</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- แถบคาดอัตราค่าปรับด้านล่าง -->
+                <div class="px-8 pb-6 pt-1 flex flex-col items-center gap-2.5 shrink-0">
+                    <div id="fine-box" class="w-full bg-yellow-400 border-4 border-slate-900 rounded-2xl py-3.5 px-6 shadow-lg text-center">
+                        <p id="sign-fine" contenteditable="true" spellcheck="false" oninput="syncFromSign('fine')" class="text-5xl font-black text-slate-900 tracking-wide leading-tight">ฝ่าฝืนปรับ 2,000 - 5,000 บาท</p>
+                    </div>
+                    <p id="sign-footer" contenteditable="true" spellcheck="false" oninput="syncFromSign('footer')" class="text-xl font-bold text-slate-700 text-center">และดำเนินคดีตามกฎหมายถึงที่สุด • พื้นที่นี้มีกล้องวงจรปิดบันทึกภาพ 24 ชม.</p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ระบบปรับขนาดป้ายอัตโนมัติ (Responsive Scaling) เพื่อให้แสดงผลเหมือนกระดาษ A4 จริงทุกหน้าจอโดยไม่ล้นกรอบ
+        function adjustSignScale() {
+            const wrapper = document.getElementById('sign-container-wrapper');
+            const scaleContainer = document.getElementById('sign-scale-container');
+            if (!wrapper || !scaleContainer) return;
+
+            const availableWidth = wrapper.clientWidth - 24;
+            const availableHeight = wrapper.clientHeight - 24;
+            const baseWidth = 1122;
+            const baseHeight = 793;
+
+            const scaleX = availableWidth / baseWidth;
+            const scaleY = availableHeight / baseHeight;
+            const scale = Math.min(scaleX, scaleY, 1);
+
+            scaleContainer.style.transform = `scale(${scale})`;
+            // ปรับความสูง wrapper บนหน้าจอมือถือให้พอดีกับป้ายที่ย่อแล้ว
+            if (window.innerWidth < 1024) {
+                wrapper.style.height = `${(baseHeight * scale) + 32}px`;
+            } else {
+                wrapper.style.height = '';
+            }
+        }
+
+        window.addEventListener('resize', adjustSignScale);
+        window.addEventListener('DOMContentLoaded', () => {
+            adjustSignScale();
+            // ป้องกันการกดปุ่ม Enter ตอนแก้ไขข้อความบนป้ายเพื่อไม่ให้บรรทัดพัง
+            document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        el.blur();
+                    }
+                });
+            });
+        });
+
+        // ซิงค์ข้อมูลจากช่อง Input ด้านซ้าย ไปยังตัวป้าย
+        function syncFromInputs() {
+            document.getElementById('sign-header').innerText = document.getElementById('input-header').value;
+            document.getElementById('sign-main1').innerText = document.getElementById('input-main1').value;
+            document.getElementById('sign-main2').innerText = document.getElementById('input-main2').value;
+            document.getElementById('sign-fine').innerText = document.getElementById('input-fine').value;
+            document.getElementById('sign-footer').innerText = document.getElementById('input-footer').value;
+            
+            const phoneVal = document.getElementById('input-phone').value.trim();
+            const phoneWrapper = document.getElementById('phone-wrapper');
+            const signPhone = document.getElementById('sign-phone');
+            signPhone.innerText = phoneVal;
+            phoneWrapper.style.display = phoneVal ? 'block' : 'none';
+        }
+
+        // ซิงค์ข้อมูลเมื่อผู้ใช้คลิกแก้ไขข้อความบนป้ายโดยตรง กลับมายังช่อง Input (แก้บั๊กข้อมูลทับกัน)
+        function syncFromSign(field) {
+            const signEl = document.getElementById(`sign-${field}`);
+            const inputEl = document.getElementById(`input-${field}`);
+            if (signEl && inputEl) {
+                inputEl.value = signEl.innerText;
+            }
+        }
+
+        // เปลี่ยนชุดข้อความสำเร็จรูป พร้อมอัปเดตสถานะปุ่มที่เลือก
+        function setPreset(type) {
+            const presets = {
+                steal: {
+                    header: 'ประกาศเตือน!',
+                    main1: 'ห้ามขโมยเห็ดฟาง',
+                    main2: 'ก่อนได้รับอนุญาต',
+                    fine: 'ฝ่าฝืนปรับ 2,000 - 5,000 บาท'
+                },
+                pick: {
+                    header: 'ประกาศห้ามเข้า-ห้ามเก็บ!',
+                    main1: 'ห้ามเก็บเห็ดฟาง',
+                    main2: 'ก่อนได้รับอนุญาตเด็ดขาด',
+                    fine: 'ฝ่าฝืนปรับ 2,000 - 5,000 บาท'
+                },
+                strict: {
+                    header: 'พื้นที่ส่วนบุคคล!',
+                    main1: 'ห้ามลักขโมยเห็ดฟาง',
+                    main2: 'จับได้ส่งดำเนินคดีตำรวจทันที',
+                    fine: 'มีโทษปรับ 2,000 - 5,000 บาท'
+                }
+            };
+
+            const selected = presets[type];
+            if (selected) {
+                document.getElementById('input-header').value = selected.header;
+                document.getElementById('input-main1').value = selected.main1;
+                document.getElementById('input-main2').value = selected.main2;
+                document.getElementById('input-fine').value = selected.fine;
+                syncFromInputs();
+            }
+
+            // อัปเดตไฮไลท์ปุ่มที่ถูกเลือก
+            ['steal', 'pick', 'strict'].forEach(key => {
+                const btn = document.getElementById(`btn-preset-${key}`);
+                const badge = btn.querySelector('span:nth-child(2)');
+                if (key === type) {
+                    btn.className = "preset-btn text-left px-3 py-2 rounded-lg border-2 border-red-600 bg-red-50 text-red-900 text-xs font-bold transition flex items-center justify-between";
+                    if (!badge) {
+                        const newBadge = document.createElement('span');
+                        newBadge.className = "text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded shrink-0 ml-2";
+                        newBadge.innerText = "เลือกอยู่";
+                        btn.appendChild(newBadge);
+                    }
+                } else {
+                    btn.className = "preset-btn text-left px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-bold hover:bg-slate-100 transition flex items-center justify-between";
+                    if (badge) badge.remove();
+                }
+            });
+        }
+
+        function toggleCCTV() {
+            const badge = document.getElementById('cctv-badge');
+            const checked = document.getElementById('toggle-cctv').checked;
+            badge.style.display = checked ? 'flex' : 'none';
+        }
+
+        function toggleEyelets() {
+            const eyelets = document.getElementById('eyelets-layer');
+            const checked = document.getElementById('toggle-eyelets').checked;
+            eyelets.classList.toggle('hidden', !checked);
+        }
+
+        function setTheme(theme) {
+            const sign = document.getElementById('printable-sign');
+            const headerBg = document.getElementById('sign-header-bg');
+            const headerText = document.getElementById('sign-header');
+            const main1 = document.getElementById('sign-main1');
+            const main2 = document.getElementById('sign-main2');
+            const footer = document.getElementById('sign-footer');
+            const fineBox = document.getElementById('fine-box');
+            const fineText = document.getElementById('sign-fine');
+
+            // อัปเดตสถานะกรอบปุ่มเลือกสี
+            ['red', 'yellow', 'dark'].forEach(t => {
+                const btn = document.getElementById(`theme-${t}`);
+                btn.classList.toggle('ring-2', t === theme);
+                btn.classList.toggle('ring-offset-2', t === theme);
+                btn.classList.toggle('ring-red-600', t === theme);
+            });
+
+            if (theme === 'red') {
+                sign.className = "w-full h-full bg-white border-[16px] border-red-600 rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden relative";
+                headerBg.className = "bg-red-600 text-white py-4 px-10 flex items-center justify-center gap-5 shadow-md relative shrink-0";
+                headerText.className = "text-6xl font-black tracking-wider uppercase text-center text-yellow-300 drop-shadow-[0_3px_3px_rgba(0,0,0,0.4)] leading-tight";
+                main1.className = "text-[76px] font-black text-red-600 tracking-tight leading-none text-shadow-sm inline-block";
+                main2.className = "text-[56px] font-extrabold text-slate-900 tracking-tight leading-tight inline-block";
+                footer.className = "text-xl font-bold text-slate-700 text-center";
+                fineBox.className = "w-full bg-yellow-400 border-4 border-slate-900 rounded-2xl py-3.5 px-6 shadow-lg text-center";
+                fineText.className = "text-5xl font-black text-slate-900 tracking-wide leading-tight";
+            } else if (theme === 'yellow') {
+                sign.className = "w-full h-full bg-amber-300 border-[16px] border-slate-900 rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden relative";
+                headerBg.className = "bg-slate-900 text-white py-4 px-10 flex items-center justify-center gap-5 shadow-md relative shrink-0";
+                headerText.className = "text-6xl font-black tracking-wider uppercase text-center text-amber-400 leading-tight";
+                main1.className = "text-[72px] font-black text-red-700 tracking-tight leading-none bg-white px-8 py-2 rounded-2xl inline-block shadow-md";
+                main2.className = "text-[54px] font-extrabold text-slate-900 tracking-tight leading-tight inline-block mt-1";
+                footer.className = "text-xl font-extrabold text-slate-900 text-center";
+                fineBox.className = "w-full bg-red-600 border-4 border-white rounded-2xl py-3.5 px-6 shadow-lg text-center";
+                fineText.className = "text-5xl font-black text-white tracking-wide leading-tight";
+            } else if (theme === 'dark') {
+                sign.className = "w-full h-full bg-slate-900 border-[16px] border-red-600 rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden relative";
+                headerBg.className = "bg-red-600 text-white py-4 px-10 flex items-center justify-center gap-5 shadow-md relative shrink-0";
+                headerText.className = "text-6xl font-black tracking-wider uppercase text-center text-white leading-tight";
+                main1.className = "text-[76px] font-black text-yellow-400 tracking-tight leading-none inline-block";
+                main2.className = "text-[56px] font-extrabold text-white tracking-tight leading-tight inline-block";
+                footer.className = "text-xl font-bold text-slate-300 text-center";
+                fineBox.className = "w-full bg-red-600 border-4 border-yellow-400 rounded-2xl py-3.5 px-6 shadow-lg text-center";
+                fineText.className = "text-5xl font-black text-white tracking-wide leading-tight";
+            }
+        }
+
+        function showStatus(message, isError = false) {
+            const statusEl = document.getElementById('status-msg');
+            statusEl.innerText = message;
+            statusEl.className = isError
+                ? "text-xs font-bold text-center py-2 px-3 rounded-lg bg-red-50 text-red-700 border border-red-200 block"
+                : "text-xs font-bold text-center py-2 px-3 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 block";
+            setTimeout(() => {
+                statusEl.classList.add('hidden');
+            }, 4000);
+        }
+
+        // ฟังก์ชันดาวน์โหลดป้ายเป็นรูปภาพ PNG ความละเอียดสูง (ใช้งานได้จริงทุกอุปกรณ์)
+        async function downloadSignImage() {
+            const btnText = document.getElementById('download-btn-text');
+            const scaleContainer = document.getElementById('sign-scale-container');
+            const sign = document.getElementById('printable-sign');
+            const pingAnim = document.querySelector('.ping-anim');
+
+            const prevTransform = scaleContainer.style.transform;
+            btnText.innerText = 'กำลังสร้างไฟล์รูปภาพความละเอียดสูง...';
+
+            try {
+                // รีเซ็ต scale ชั่วคราวเพื่อให้ได้ภาพขนาดเต็ม 2244x1586 px (คมชัดระดับพิมพ์ไวนิล/A4)
+                scaleContainer.style.transform = 'none';
+                if (pingAnim) pingAnim.style.display = 'none';
+
+                const canvas = await html2canvas(sign, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: null,
+                    logging: false
+                });
+
+                const imageURL = canvas.toDataURL('image/png', 1.0);
+                const link = document.createElement('a');
+                link.download = 'ป้ายห้ามขโมยเห็ดฟาง.png';
+                link.href = imageURL;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                showStatus('✅ ดาวน์โหลดรูปภาพป้ายสำเร็จ! นำไฟล์ไปสั่งพิมพ์ได้เลย');
+            } catch (err) {
+                console.error(err);
+                showStatus('⚠️ ไม่สามารถสร้างรูปภาพได้ กรุณาใช้ปุ่มสั่งพิมพ์/PDF แทน', true);
+            } finally {
+                scaleContainer.style.transform = prevTransform;
+                if (pingAnim) pingAnim.style.display = '';
+                btnText.innerText = 'ดาวน์โหลดเป็นรูปภาพ (PNG คมชัดสูง)';
+            }
+        }
+
+        // ฟังก์ชันสั่งพิมพ์พร้อมจัดการขนาดกระดาษ
+        function printSign() {
+            window.print();
+        }
+    </script>
+</body>
+</html>
